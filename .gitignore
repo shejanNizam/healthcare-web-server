@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.vercel
+*.log
+
+# env files with real credentials — only the example/sample/local templates are safe to commit
+.env
