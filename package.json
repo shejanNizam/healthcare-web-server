@@ -1,5 +1,5 @@
 {
-  "name": "express-nosql-template",
+  "name": "healthcare-web-server",
   "version": "1.0.0",
   "description": "Production-ready Express + MongoDB + TypeScript template with auth, OTP, Redis, Socket.io, and Cloudinary",
   "main": "dist/server.js",

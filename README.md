@@ -1,6 +1,10 @@
-# Tour Management Server
+# CENM Healthcare — Backend API Server
 
-A production-ready REST API backend for a tour management platform built with **Node.js**, **Express**, **TypeScript**, and **MongoDB**. Features role-based access control, Google OAuth, Stripe payment integration, Cloudinary image uploads, Redis caching, OTP-based email verification, and PDF invoice generation.
+Production-ready REST API for the **CENM Healthcare** nurse-staffing platform serving Southern California and Tennessee. Built with **Express 5**, **TypeScript**, **MongoDB**, and **Redis**.
+
+The API serves two separate frontends:
+- **Public website** — Next.js 15 (job listings, applications, blogs, staffing solutions)
+- **Admin dashboard** — React + Vite (user management, content, analytics)
 
 ---
 
@@ -8,19 +12,19 @@ A production-ready REST API backend for a tour management platform built with **
 
 | Layer | Technology |
 |---|---|
-| Runtime | Node.js (ESM) |
+| Runtime | Node.js 18+ (CommonJS) |
 | Framework | Express.js v5 |
-| Language | TypeScript |
-| Database | MongoDB + Mongoose |
-| Cache / Session | Redis |
+| Language | TypeScript 5 |
+| Database | MongoDB + Mongoose v9 |
+| Cache / OTP Store | Redis v6 |
 | Auth | JWT (access + refresh tokens), Passport.js (Google OAuth + local) |
-| Payment | Stripe |
 | File Uploads | Multer + Cloudinary |
 | Email | Nodemailer (SMTP) + EJS templates |
-| PDF | PDFKit |
-| Validation | Zod |
-| Security | Helmet, Bcrypt, HTTP-only cookies |
-| Deployment | Vercel (serverless) |
+| Validation | Zod v4 |
+| Real-time | Socket.io + Redis adapter |
+| Logging | Winston |
+| Security | Helmet, Bcrypt, HTTP-only cookies, XSS sanitizer, Mongo sanitizer |
+| API Docs | Swagger UI (`/api/v1/docs`) |
 
 ---
 
@@ -28,216 +32,61 @@ A production-ready REST API backend for a tour management platform built with **
 
 ```
 src/
-├── server.ts                  # Entry point — DB/Redis connect, graceful shutdown
-├── app.ts                     # Express app, middleware setup
+├── server.ts                        # Entry point — DB/Redis connect, seed admin, graceful shutdown
+├── app.ts                           # Express app, global middleware
 └── app/
     ├── config/
-    │   ├── index.ts           # Typed env config
+    │   ├── index.ts                 # Zod-validated env config
     │   ├── cloudinary.config.ts
     │   ├── multer.config.ts
-    │   ├── passport.ts        # Google OAuth + local strategy
+    │   ├── passport.ts              # Google OAuth + local strategy
     │   └── redis.config.ts
-    ├── constants.ts
     ├── interfaces/
-    │   ├── index.d.ts         # Express Request augmentation
+    │   ├── index.d.ts               # Express Request augmentation (req.user)
     │   └── error.types.ts
     ├── errorHelpers/
-    │   └── AppError.ts        # Custom operational error class
-    ├── helpers/               # Error normalizers (cast, duplicate, validation, zod)
+    │   └── AppError.ts              # Custom operational error class
+    ├── helpers/                     # Error normalizers (cast, duplicate, validation, zod)
     ├── middlewares/
-    │   ├── checkAuth.ts       # JWT guard + RBAC
-    │   ├── validateRequest.ts # Zod schema validation
+    │   ├── checkAuth.ts             # JWT guard + RBAC (role-based access)
+    │   ├── validateRequest.ts       # Zod schema middleware
+    │   ├── rateLimiter.ts           # Auth, OTP rate limiters
     │   ├── globalErrorHandler.ts
     │   └── notFound.ts
     ├── routes/
-    │   └── index.ts           # Aggregates all module routes under /api/v1
+    │   └── index.ts                 # Aggregates all module routes under /api/v1
     ├── modules/
-    │   ├── auth/              # Login, logout, refresh token, password, Google OAuth
-    │   ├── user/              # Register, profile, admin user management
-    │   ├── tour/              # Tours + tour types (CRUD, image upload)
-    │   ├── booking/           # Tour bookings
-    │   ├── payment/           # Payment records
-    │   ├── payment/           # Stripe payment gateway integration
-    │   ├── otp/               # OTP generation and verification
-    │   ├── division/          # Geographic divisions
-    │   └── stats/             # Admin dashboard statistics
+    │   ├── auth/                    # Login, logout, refresh token, OAuth, password management
+    │   ├── user/                    # Register, profile, admin user management
+    │   │   ├── user.auth.service.ts # Healthcare signup/OTP/forget-password/reset flow
+    │   │   └── pending_user.model.ts# Temporary pre-verification accounts (TTL index)
+    │   ├── value/                   # Dropdown option management (Category, Profession, Specialty…)
+    │   ├── job_post/                # Job post CRUD
+    │   ├── apply/                   # 3-step job application flow + international applications
+    │   ├── notification/            # Admin notifications (auto-fired on new app/contact)
+    │   ├── blog/                    # Blog posts (id or slug lookup)
+    │   ├── staffing/                # Staffing solution pages + FAQs + whatWeDo
+    │   ├── content/                 # About / Terms / Privacy (upsert by type)
+    │   ├── banner/                  # Homepage banners
+    │   ├── contact/                 # Contact form submissions (auto-marks read on view)
+    │   ├── feedback/                # User feedback / testimonials
+    │   ├── dashboard/               # Admin overview + monthly chart + user/applicant lists
+    │   ├── payment/                 # Payment records
+    │   ├── charge/                  # Platform charge/fee configuration
+    │   ├── community/               # Community member management
+    │   ├── upload/                  # File upload to Cloudinary
+    │   ├── otp/                     # OTP generation and verification
+    │   └── device_token/            # Push notification device tokens
     └── utils/
         ├── catchAsync.ts
-        ├── sendResponse.ts
-        ├── sendEmail.ts
-        ├── setCookie.ts
-        ├── jwt.ts
-        ├── userTokens.ts
-        ├── QueryBuilder.ts    # Filterable/paginated query builder
-        ├── getTransactionId.ts
-        ├── invoice.ts         # PDF invoice generator
+        ├── sendResponse.ts          # Standard response envelope
+        ├── sendEmail.ts             # Nodemailer + EJS
+        ├── setCookie.ts             # HttpOnly refresh-token cookie
+        ├── userTokens.ts            # JWT access + refresh token factory
+        ├── QueryBuilder.ts          # Filterable / paginated / sorted query builder
         ├── seedAdmin.ts
         ├── seedSuperAdmin.ts
-        └── templates/         # EJS email templates (OTP, forgot password, invoice)
-```
-
----
-
-## API Endpoints
-
-All routes are prefixed with `/api/v1`.
-
-### Auth — `/api/v1/auth`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| POST | `/login` | Public | Credentials login |
-| POST | `/refresh-token` | Public | Get new access token |
-| POST | `/logout` | Public | Logout |
-| POST | `/change-password` | All roles | Change password |
-| POST | `/set-password` | All roles | Set password (OAuth users) |
-| POST | `/forgot-password` | Public | Send reset OTP via email |
-| POST | `/reset-password` | All roles | Reset password with OTP |
-| GET | `/google` | Public | Initiate Google OAuth |
-| GET | `/google/callback` | Public | Google OAuth callback |
-
-### User — `/api/v1/user`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| POST | `/register` | Public | Register new user |
-| GET | `/all-users` | Admin, Super Admin | Get all users |
-| GET | `/me` | All roles | Get own profile |
-| GET | `/:id` | Admin, Super Admin | Get user by ID |
-| PATCH | `/:id` | All roles | Update user profile |
-
-### Tour — `/api/v1/tour`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| POST | `/create` | Admin, Super Admin | Create tour (with image upload) |
-| GET | `/all` | Public | Get all tours |
-| GET | `/:slug` | Public | Get single tour by slug |
-| PATCH | `/:id` | Admin, Super Admin | Update tour |
-| DELETE | `/:id` | Public | Delete tour |
-| POST | `/create-tour-type` | Public | Create tour type |
-| GET | `/tour-types/all` | Public | Get all tour types |
-| GET | `/tour-types/:id` | Public | Get single tour type |
-| PATCH | `/tour-types/:id` | Public | Update tour type |
-| DELETE | `/tour-types/:id` | Public | Delete tour type |
-
-### Booking — `/api/v1/booking`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| POST | `/create` | All roles | Create a booking |
-
-### Payment — `/api/v1/payment`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| GET | `/invoice/:paymentId` | All roles | Get invoice download URL |
-
-### OTP — `/api/v1/otp`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| — | — | — | OTP send and verify |
-
-### Division — `/api/v1/division`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| — | — | — | Geographic division CRUD |
-
-### Stats — `/api/v1/stats`
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| — | — | — | Admin dashboard statistics |
-
----
-
-## Roles
-
-| Role | Description |
-|------|-------------|
-| `SUPER_ADMIN` | Full platform access |
-| `ADMIN` | Manage tours, users, bookings |
-| `USER` | Browse tours, create bookings |
-| `GUIDE` | Tour guide role |
-
----
-
-## Standard Response Format
-
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Operation successful",
-  "meta": { "page": 1, "limit": 10, "total": 100 },
-  "data": {}
-}
-```
-
----
-
-## Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-# Server
-PORT=5000
-NODE_ENV=development
-
-# Database
-DATABASE_URL=mongodb://localhost:27017/tour_management
-
-# JWT
-JWT_ACCESS_SECRET=your_access_secret
-JWT_ACCESS_EXPIRES=1d
-JWT_REFRESH_SECRET=your_refresh_secret
-JWT_REFRESH_EXPIRES=30d
-
-# Auth
-BCRYPT_SALT_ROUND=12
-DEFAULT_PASSWORD=default_password
-
-# Seeded Admin Accounts
-SUPER_ADMIN_EMAIL=superadmin@example.com
-SUPER_ADMIN_PASSWORD=superadmin_password
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=admin_password
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_CALLBACK_URL=http://localhost:5000/api/v1/auth/google/callback
-
-# Session
-EXPRESS_SESSION_SECRET=your_session_secret
-
-# CORS
-FRONTEND_URL=http://localhost:3000
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_USERNAME=
-REDIS_PASSWORD=
-
-# Cloudinary
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-
-# Email (SMTP)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_app_password
-SMTP_FROM=your_email@gmail.com
-
-# Stripe
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
-STRIPE_WEBHOOK_SECRET=whsec_your_stripe_webhook_secret
+        └── templates/              # EJS email templates (otp, forgot-password, welcome)
 ```
 
 ---
@@ -248,16 +97,18 @@ STRIPE_WEBHOOK_SECRET=whsec_your_stripe_webhook_secret
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/shejanNizam/tour_management_server.git
-cd tour_management_server
+git clone <repo-url>
+cd healthcare-web-server
 
 # 2. Install dependencies
 npm install
 
-# 3. Create .env file and fill in environment variables (see above)
+# 3. Copy and fill in environment variables
+cp .env.example .env
+# Edit .env with your values (see Environment Variables section below)
 
-# 4. Start development server
-npm run dev
+# 4. Start development server (loads .env automatically)
+npm run dev:local
 
 # 5. Build for production
 npm run build
@@ -266,24 +117,381 @@ npm run build
 npm start
 ```
 
+> **Note:** `npm run dev` does **not** load `.env`. Always use `npm run dev:local` in development.
+
 ---
 
 ## Available Scripts
 
 | Script | Description |
-|--------|-------------|
-| `npm run dev` | Start dev server with hot-reload via `tsx watch` |
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm start` | Run compiled server from `dist/server.js` |
+|---|---|
+| `npm run dev:local` | Dev server with hot-reload + `.env` loaded via `--env-file` |
+| `npm run dev` | Dev server without `.env` (CI/container environments with injected vars) |
+| `npm run build` | Compile TypeScript to `dist/` + copy email templates |
+| `npm start` | Run compiled server from `dist/server.js` (loads `.env`) |
 | `npm run lint` | Run ESLint |
+| `npm test` | Run Jest test suite |
+| `npm run test:coverage` | Jest with coverage report |
+
+---
+
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+# ─── Server ──────────────────────────────────────────────────────────────────
+PORT=5000
+NODE_ENV=development
+
+# ─── Database ────────────────────────────────────────────────────────────────
+DATABASE_URL=mongodb://localhost:27017/cenm_healthcare
+
+# ─── JWT ─────────────────────────────────────────────────────────────────────
+JWT_ACCESS_SECRET=your_access_secret_here
+JWT_ACCESS_EXPIRES=1d
+JWT_REFRESH_SECRET=your_refresh_secret_here
+JWT_REFRESH_EXPIRES=30d
+JWT_RESET_SECRET=your_reset_secret_here
+JWT_RESET_EXPIRES=15m
+
+# ─── Security ────────────────────────────────────────────────────────────────
+BCRYPT_SALT_ROUND=12
+DEFAULT_PASSWORD=default_password
+
+# ─── Seeded Admin Accounts ───────────────────────────────────────────────────
+SUPER_ADMIN_EMAIL=superadmin@cenm.com
+SUPER_ADMIN_PASSWORD=SuperAdminPass123
+ADMIN_EMAIL=admin@cenm.com
+ADMIN_PASSWORD=AdminPass123
+
+# ─── Google OAuth ────────────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/v1/auth/google/callback
+
+# ─── Session ─────────────────────────────────────────────────────────────────
+EXPRESS_SESSION_SECRET=your_session_secret
+
+# ─── CORS ────────────────────────────────────────────────────────────────────
+FRONTEND_URL=http://localhost:3000
+
+# ─── Redis ───────────────────────────────────────────────────────────────────
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_USERNAME=
+REDIS_PASSWORD=
+
+# ─── Cloudinary ──────────────────────────────────────────────────────────────
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+
+# ─── Email (SMTP) ────────────────────────────────────────────────────────────
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+SMTP_FROM=your_email@gmail.com
+```
+
+---
+
+## API Overview
+
+All routes are prefixed with `/api/v1`.  
+Full documentation is split into two files:
+
+| Audience | File |
+|---|---|
+| Public website (Next.js) | [`docs/api-website.md`](docs/api-website.md) |
+| Admin dashboard (React + Vite) | [`docs/api-admin.md`](docs/api-admin.md) |
+
+Interactive Swagger UI is available at **`/api/v1/docs`** when the server is running.
+
+---
+
+### Auth — `/api/v1/auth`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| POST | `/login` | Public | Email + password login |
+| POST | `/logout` | Public | Clear refresh token cookie |
+| POST | `/refresh-token` | Public | Issue new access token from cookie |
+| POST | `/change-password` | All roles | Change own password |
+| POST | `/set-password` | All roles | Set password for OAuth-only accounts |
+| POST | `/forgot-password` | Public | Send reset link to email |
+| POST | `/reset-password` | Reset token | Reset password |
+| GET | `/google` | Public | Start Google OAuth flow |
+| GET | `/google/callback` | — | Google OAuth callback (handled by Google) |
+
+---
+
+### User — `/api/v1/user`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| POST | `/signup` | Public | Register — stores pending + sends OTP |
+| POST | `/verify-email` | Public | Verify OTP → promote to active user + issue tokens |
+| POST | `/resend` | Public | Resend registration OTP |
+| POST | `/forget-password` | Public | Send reset OTP to email |
+| POST | `/verify-forget-otp` | Public | Verify reset OTP → return reset grant |
+| POST | `/reset-password` | Public | Complete reset with grant |
+| GET | `/me` | All roles | Get own profile |
+| GET | `/my-profile` | All roles | Alias for `/me` |
+| POST | `/update` | All roles | Update own profile (name, phone, address, avatar) |
+| DELETE | `/me` | All roles | Soft-delete own account |
+| POST | `/register` | Public | Direct register (no OTP) |
+| GET | `/all-users` | Admin | Paginated user list |
+| GET | `/:id` | Admin | Get user by ID |
+| PATCH | `/:id` | Admin | Update user (role, status, etc.) |
+| DELETE | `/:id` | Admin | Soft-delete user |
+
+---
+
+### Values / Dropdowns — `/api/v1/value`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/all/:group` | Public | List options for a group |
+| POST | `/create/:group` | Admin | Add a new option |
+| POST | `/update/:group/:id` | Admin | Update an option |
+| DELETE | `/delete/:id` | Admin | Soft-delete an option |
+
+**Groups:** `Category` · `Profession` · `Discipline` · `Specialty` · `License` · `Job-type`
+
+---
+
+### Job Posts — `/api/v1/job`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/all` | Public | Paginated + filtered job list |
+| GET | `/single/:id` | Public | Single job by ObjectId |
+| POST | `/create` | Admin | Create job post |
+| POST | `/update/:id` | Admin | Update job post |
+| DELETE | `/delete/:id` | Admin | Soft-delete job post |
+
+---
+
+### Applications — `/api/v1/apply`
+
+3-step sequential flow for job applications. International applications omit `jobPostId`.
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| POST | `/personal-info` | Public | Step 1 — personal info (atomic, returns `appliedJobId`) |
+| POST | `/create/:id` | Public | Step 2 — professional licenses + certifications |
+| PUT | `/education-info/:id` | Public | Step 3 — education + employment history |
+| GET | `/all/:id` | Admin | All applications for a job post |
+| GET | `/single/:id` | Admin | Full detail of one application |
+
+---
+
+### Dashboard — `/api/v1/dashboard`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/over-view` | Admin | Total jobs / applicants / contacts / users |
+| GET | `/:year` | Admin | Monthly applicant counts for the year (all 12 months) |
+| GET | `/user-list` | Admin | Paginated user list (same as `/user/all-users`) |
+| GET | `/all-international-application` | Admin | All international applications |
+| GET | `/single-international-application/:id` | Admin | Single international application |
+
+---
+
+### Blogs — `/api/v1/blog`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/all` | Public | Paginated blog list |
+| GET | `/single/:id` | Public | Blog by ObjectId **or** URL slug |
+| GET | `/category/blogs` | Public | All distinct categories |
+| POST | `/create` | Admin | Create blog post |
+| POST | `/edit/:id` | Admin | Update blog post |
+| DELETE | `/delete/:id` | Admin | Soft-delete blog post |
+
+---
+
+### Staffing Solutions — `/api/v1/staffing`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/all` | Public | List all staffing pages |
+| GET | `/all-faq` | Public | All FAQs across staffing pages |
+| GET | `/:id` | Public | Single staffing page (full detail) |
+| POST | `/create` | Admin | Create a staffing page |
+| POST | `/update/:id` | Admin | Update a staffing page |
+| PATCH | `/FQA/:id` | Admin | Add or remove a single FAQ |
+| PATCH | `/what_we_do/:id` | Admin | Add or remove a "What We Do" item |
+
+---
+
+### Static Content — `/api/v1`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/about` | Public | About Us content |
+| POST | `/about/update` | Admin | Create or replace About content |
+| GET | `/terms` | Public | Terms and Conditions |
+| POST | `/terms/update` | Admin | Create or replace Terms content |
+| GET | `/privacy` | Public | Privacy Policy |
+| POST | `/privacy/update` | Admin | Create or replace Privacy content |
+
+---
+
+### Banners — `/api/v1/banner`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/` | Public | List active banners |
+| POST | `/create` | Admin | Create a banner |
+| PATCH | `/update` | Admin | Update banner (id in request body) |
+| DELETE | `/delete` | Admin | Soft-delete banner (id in body or query) |
+
+---
+
+### Contact — `/api/v1/contact`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| POST | `/create` | Public | Submit enquiry (triggers admin notification) |
+| GET | `/all` | Admin | Paginated enquiry list |
+| GET | `/single/:id` | Admin | Single enquiry (auto-marks as read) |
+
+---
+
+### Notifications — `/api/v1/notification`
+
+Auto-created when a new application or contact form is submitted.
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/` | Admin | All notifications (latest first) |
+| PATCH | `/read/:id` | Admin | Mark notification as read |
+
+---
+
+### Feedback — `/api/v1/feedback`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| POST | `/create` | Logged-in users | Submit feedback (name/email auto-filled) |
+| GET | `/all` | Admin | All feedback submissions |
+
+---
+
+### Payment — `/api/v1/payment`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/history` | Admin | Paginated payment records |
+
+---
+
+### Charge — `/api/v1/charge`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/` | Admin | Current charge/fee settings |
+| PATCH | `/update` | Admin | Update charge settings |
+
+---
+
+### Community — `/api/v1/community`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | `/` | Admin | List community members |
+| GET | `/details` | Admin | Detail view of a member (`id` in query) |
+| DELETE | `/delete` | Admin | Delete a member (`id` in body or query) |
+
+---
+
+### File Upload — `/api/v1/upload`
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| POST | `/` | — | Upload file to Cloudinary (`multipart/form-data`, field: `file`) |
+
+> Also available at `/api/v1/uploded` (legacy alias).
+
+---
+
+## Response Format
+
+**Success**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Operation successful",
+  "data": {},
+  "meta": { "page": 1, "limit": 10, "total": 100, "totalPage": 10 }
+}
+```
+
+**Error**
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "Validation Error",
+  "errorMessages": [
+    { "path": "body.email", "message": "Invalid email address" }
+  ]
+}
+```
+
+---
+
+## Roles and Access
+
+| Role | Description |
+|---|---|
+| `super_admin` | Full platform access including all admin operations |
+| `admin` | Manage jobs, applications, content, users, and dashboard |
+| `user` | Browse jobs, submit applications, manage own profile, leave feedback |
+
+Admin and super-admin accounts are **auto-seeded** on server start from `SUPER_ADMIN_*` and `ADMIN_*` env vars.
 
 ---
 
 ## Key Features
 
-- **Auto-seeding**: Super admin and admin accounts are seeded automatically on startup from `.env` credentials.
-- **Graceful shutdown**: Handles `SIGTERM`, `SIGINT`, `unhandledRejection`, and `uncaughtException` — closes DB and Redis connections cleanly.
-- **Vercel serverless**: Exports the Express app for Vercel's serverless runtime.
-- **Modular architecture**: Each feature is self-contained with its own controller, service, model, validation, and route.
-- **QueryBuilder**: Reusable utility for filtering, sorting, and paginating Mongoose queries.
-- **PDF invoices**: Generates booking invoices with PDFKit, delivered via email using EJS templates.
+- **OTP-based signup** — New users go through `PendingUser` → OTP email → verified `User`. MongoDB TTL index auto-purges unverified signups after 24 hours.
+- **Two password-reset flows** — Classic reset-link flow via `/auth/forgot-password` and OTP-based flow via `/user/forget-password` + grant token.
+- **Token versioning** — `tokenVersion` field on User is bumped on every password reset, invalidating all previously issued JWTs.
+- **Atomic application step 1** — MongoDB session/transaction ensures no orphan `JobInfo` records are left if the deduplication check fails.
+- **Partial unique index** — `AppliedJob` blocks duplicate local applications to the same job while allowing unlimited international (job-less) applications from the same email.
+- **Auto-notifications** — `createNotification()` is called automatically when a new application or contact form is submitted.
+- **Soft deletes everywhere** — No hard-deletes. All reads filter `{ isDeleted: false }`.
+- **QueryBuilder** — Reusable utility for pagination, sorting, field filtering, and full-text search across all list endpoints.
+- **Slug + ObjectId lookup** — Blog posts can be fetched by either MongoDB ObjectId or URL slug in the same endpoint.
+- **Auto-seeding** — Super admin and admin accounts are created on first run; skipped on subsequent runs.
+- **Graceful shutdown** — Handles `SIGTERM`, `SIGINT`, `unhandledRejection`, `uncaughtException` — closes MongoDB and Redis connections cleanly before exit.
+- **Modular architecture** — Each feature is self-contained with its own interface, model, service, controller, validation, and route file.
+
+---
+
+## Rate Limits
+
+| Route group | Limit |
+|---|---|
+| `/auth/login`, `/auth/forgot-password`, `/auth/change-password`, `/auth/set-password` | 10 req / 15 min per IP |
+| `/user/signup`, `/user/forget-password` | 5 req / 15 min per IP |
+| `/user/resend` | 3 req / 5 min per IP |
+
+---
+
+## Common Query Parameters
+
+All paginated list endpoints support:
+
+| Param | Type | Description |
+|---|---|---|
+| `page` | number | Page number (default: `1`) |
+| `limit` | number | Items per page (default: `10`) |
+| `sort` | string | Field to sort by; prefix `-` for descending (e.g. `-createdAt`) |
+| `searchTerm` | string | Partial-match search across indexed text fields |
+| any field | string | Exact filter (e.g. `status=active`, `role=admin`) |
