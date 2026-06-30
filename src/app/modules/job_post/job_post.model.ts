@@ -13,7 +13,11 @@ const jobPostSchema = new Schema<IJobPost>(
     salaryMin: { type: Number },
     salaryMax: { type: Number },
     currency: { type: String, default: "USD" },
-    salaryPeriod: { type: String, enum: Object.values(SalaryPeriod), default: SalaryPeriod.year },
+    salaryPeriod: {
+      type: String,
+      enum: Object.values(SalaryPeriod),
+      default: SalaryPeriod.year,
+    },
     vacancy: { type: Number },
     startDate: { type: Date },
     hoursPerWeek: { type: Number, required: true },

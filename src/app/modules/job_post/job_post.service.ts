@@ -1,14 +1,19 @@
 import httpStatus from "http-status";
 import { JwtPayload } from "jsonwebtoken";
-import { QueryBuilder } from "../../utils/QueryBuilder";
 import AppError from "../../errorHelpers/AppError";
+import { QueryBuilder } from "../../utils/QueryBuilder";
 import { IJobPost } from "./job_post.interface";
 import { JobPost } from "./job_post.model";
 
 const getAllJobs = async (query: Record<string, string>) => {
   const baseQuery = JobPost.find({ isDeleted: false });
   const qb = new QueryBuilder(baseQuery, query);
-  const data = await qb.search(["title", "hospitalName"]).filter().sort().paginate().build();
+  const data = await qb
+    .search(["title", "hospitalName"])
+    .filter()
+    .sort()
+    .paginate()
+    .build();
   const meta = await qb.getMeta();
   return { data, meta };
 };
@@ -23,7 +28,11 @@ const createJob = async (payload: Partial<IJobPost>, user: JwtPayload) => {
   return JobPost.create({ ...payload, createdBy: user._id });
 };
 
-const updateJob = async (id: string, payload: Partial<IJobPost>, user: JwtPayload) => {
+const updateJob = async (
+  id: string,
+  payload: Partial<IJobPost>,
+  user: JwtPayload,
+) => {
   const job = await JobPost.findOneAndUpdate(
     { _id: id, isDeleted: false },
     { ...payload, updatedBy: user._id },
@@ -43,4 +52,10 @@ const deleteJob = async (id: string) => {
   return job;
 };
 
-export const JobPostServices = { getAllJobs, getSingleJob, createJob, updateJob, deleteJob };
+export const JobPostServices = {
+  getAllJobs,
+  getSingleJob,
+  createJob,
+  updateJob,
+  deleteJob,
+};
